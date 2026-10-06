@@ -1,5 +1,5 @@
-#ifndef SENDER_H
-#define SENDER_H
+#ifndef SENDER_GBN_H
+#define SENDER_GBN_H
 
 #include "packet.h"
 

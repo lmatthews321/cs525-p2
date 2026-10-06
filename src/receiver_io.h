@@ -1,5 +1,5 @@
-#ifndef RECEIVER_NET_H
-#define RECEIVER_NET_H
+#ifndef RECEIVER_IO_H
+#define RECEIVER_IO_H
 
 #include <stdint.h>
 

@@ -17,28 +17,33 @@ extern void __gcov_dump(void);
 
 #include "harness/unity.h"
 #include "../src/packet.h"
-#include "../src/receiver.h"
-#include "../src/receiver_net.h"
-#include "../src/relay_client.h"
-#include "../src/sender.h"
-#include "../src/sender_net.h"
+#include "../src/receiver_gbn.h"
+#include "../src/receiver_io.h"
+#include "../src/relay_io.h"
+#include "../src/sender_gbn.h"
+#include "../src/sender_io.h"
 
 enum {
-    RECEIVER_NET_TEST_NORMAL = 0,
-    RECEIVER_NET_TEST_EXPIRED = 1,
-    RECEIVER_NET_TEST_SEQUENCE_OVERFLOW = 2
+    RECEIVER_IO_TEST_NORMAL = 0,
+    RECEIVER_IO_TEST_EXPIRED = 1,
+    RECEIVER_IO_TEST_SEQUENCE_OVERFLOW = 2
 };
 
 enum {
-    SENDER_NET_TEST_NORMAL = 0,
-    SENDER_NET_TEST_DISARM_TIMER_AFTER_FIN = 1,
-    SENDER_NET_TEST_NONEMPTY_ACK = 2
+    SENDER_IO_TEST_NORMAL = 0,
+    SENDER_IO_TEST_DISARM_TIMER_AFTER_FIN = 1,
+    SENDER_IO_TEST_NONEMPTY_ACK = 2,
+    SENDER_IO_TEST_DATA_LIMIT = 3,
+    SENDER_IO_TEST_FIN_SEQUENCE_LIMIT = 4
 };
 
 extern sender_status_t sender_test_queue_fin(sender_state_t *state,
                                               sender_action_t *action);
-extern void receiver_net_test_set_mode(int mode);
-extern void sender_net_test_set_mode(int mode);
+extern void receiver_io_test_set_mode(int mode);
+extern void sender_io_test_set_mode(int mode);
+extern int receiver_io_test_rejects_invalid_packet(void);
+extern int sender_io_test_rejects_invalid_action(void);
+extern const char *sender_io_test_input_path(void);
 
 #define TEST_CHANNEL_CAPACITY 256U
 
@@ -582,9 +587,11 @@ static int test_registration_result(const char *reply,
     }
     if (operation == 1) {
         relay_client_close(&client);
-        registration_result = sender_send_file("coveragetest", "127.0.0.1",
-                                               ntohs(relay_address.sin_port), "/dev/null",
-                                               window_size, 1, 0.5, 0.5, 0.5);
+        registration_result = sender_send_file(
+            "coveragetest", "127.0.0.1",
+            ntohs(relay_address.sin_port),
+            sender_io_test_input_path(),
+            window_size, 1, 0.5, 0.5, 0.5);
     } else if (operation == 2) {
         relay_client_close(&client);
         registration_result = receiver_receive_file("coveragetest", "127.0.0.1",
@@ -1511,14 +1518,14 @@ void test_receiver_network_timeout_and_state_error_paths(void)
     int timed_out;
     int state_error;
 
-    receiver_net_test_set_mode(RECEIVER_NET_TEST_EXPIRED);
+    receiver_io_test_set_mode(RECEIVER_IO_TEST_EXPIRED);
     timed_out = test_registration_result("OK", 1, 2, 2, 1);
-    receiver_net_test_set_mode(RECEIVER_NET_TEST_NORMAL);
+    receiver_io_test_set_mode(RECEIVER_IO_TEST_NORMAL);
     TEST_ASSERT_TRUE(timed_out);
 
-    receiver_net_test_set_mode(RECEIVER_NET_TEST_SEQUENCE_OVERFLOW);
+    receiver_io_test_set_mode(RECEIVER_IO_TEST_SEQUENCE_OVERFLOW);
     state_error = test_registration_result("OK_DATA_MAX", 1, 2, 2, 1);
-    receiver_net_test_set_mode(RECEIVER_NET_TEST_NORMAL);
+    receiver_io_test_set_mode(RECEIVER_IO_TEST_NORMAL);
     TEST_ASSERT_TRUE(state_error);
 }
 
@@ -1572,16 +1579,30 @@ void test_sender_network_state_guards(void)
 {
     int inactive_timer;
     int nonempty_ack;
+    int data_limit;
+    int fin_sequence_limit;
 
-    sender_net_test_set_mode(SENDER_NET_TEST_DISARM_TIMER_AFTER_FIN);
+    TEST_ASSERT_TRUE(sender_io_test_rejects_invalid_action());
+    TEST_ASSERT_TRUE(receiver_io_test_rejects_invalid_packet());
+    sender_io_test_set_mode(SENDER_IO_TEST_DISARM_TIMER_AFTER_FIN);
     inactive_timer = test_registration_result("OK", 1, 2, 1, 1);
-    sender_net_test_set_mode(SENDER_NET_TEST_NORMAL);
+    sender_io_test_set_mode(SENDER_IO_TEST_NORMAL);
     TEST_ASSERT_TRUE(inactive_timer);
 
-    sender_net_test_set_mode(SENDER_NET_TEST_NONEMPTY_ACK);
+    sender_io_test_set_mode(SENDER_IO_TEST_NONEMPTY_ACK);
     nonempty_ack = test_registration_result("OK_PACKET", 1, 2, 1, 1);
-    sender_net_test_set_mode(SENDER_NET_TEST_NORMAL);
+    sender_io_test_set_mode(SENDER_IO_TEST_NORMAL);
     TEST_ASSERT_TRUE(nonempty_ack);
+
+    sender_io_test_set_mode(SENDER_IO_TEST_DATA_LIMIT);
+    data_limit = test_registration_result("OK", 1, 2, 1, 1);
+    sender_io_test_set_mode(SENDER_IO_TEST_NORMAL);
+    TEST_ASSERT_TRUE(data_limit);
+
+    sender_io_test_set_mode(SENDER_IO_TEST_FIN_SEQUENCE_LIMIT);
+    fin_sequence_limit = test_registration_result("OK", 1, 2, 1, 1);
+    sender_io_test_set_mode(SENDER_IO_TEST_NORMAL);
+    TEST_ASSERT_TRUE(fin_sequence_limit);
 }
 
 /* Register and execute the project's Unity unit and integration tests. */

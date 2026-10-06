@@ -1,5 +1,5 @@
-#ifndef RELAY_CLIENT_H
-#define RELAY_CLIENT_H
+#ifndef RELAY_IO_H
+#define RELAY_IO_H
 
 #include "packet.h"
 

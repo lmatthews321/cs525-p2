@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "relay_client.h"
-#include "receiver.h"
+#include "relay_io.h"
+#include "receiver_gbn.h"
 
 #include <errno.h>
 #include <math.h>
@@ -34,6 +34,7 @@ static int wait_for_readable(int socket_fd, uint64_t timeout_ms)
 {
     uint64_t now_ms;
     uint64_t deadline_ms;
+    int poll_once = 1;
 
     /* Excluded: this path requires the operating system clock call to fail. */
     if (!monotonic_now_ms(&now_ms)) { /* GCOVR_EXCL_START */
@@ -42,13 +43,13 @@ static int wait_for_readable(int socket_fd, uint64_t timeout_ms)
     }
     deadline_ms = now_ms > UINT64_MAX - timeout_ms ? UINT64_MAX : now_ms + timeout_ms;
 
-    /* Excluded line: the wait loop exits through readiness, timeout, or OS error. */
-    for (;;) { /* GCOVR_EXCL_LINE */
+    while (poll_once || now_ms < deadline_ms) {
         struct pollfd descriptor = {socket_fd, POLLIN, 0};
         uint64_t remaining_ms;
         int poll_timeout;
         int poll_status;
 
+        poll_once = 0;
         /* Excluded: this path requires the operating system clock call to fail. */
         if (!monotonic_now_ms(&now_ms)) { /* GCOVR_EXCL_START */
             return -1;
@@ -83,6 +84,7 @@ static int wait_for_readable(int socket_fd, uint64_t timeout_ms)
             /* GCOVR_EXCL_STOP */
         }
     }
+    return 0; /* GCOVR_EXCL_LINE: unexpected poll event flags are OS-controlled. */
 }
 
 /* Resolve the relay and connect a UDP socket to one of its available addresses. */
@@ -95,9 +97,8 @@ int relay_client_open(relay_client_t *client, const char *relay, uint16_t port)
     int address_status;
     int last_error = 0;
 
-    if (client == NULL || relay == NULL) { /* GCOVR_EXCL_START */
+    if (client == NULL || relay == NULL) {
         return 0;
-        /* GCOVR_EXCL_STOP */
     }
     client->socket_fd = -1;
     client->last_now_ms = 0;
@@ -172,43 +173,48 @@ static int register_hello(relay_client_t *client, const char *hello, size_t hell
             /* GCOVR_EXCL_STOP */
         }
 
-        /* Excluded line: each reply-wait iteration ends in reply, timeout, or error. */
-        for (;;) { /* GCOVR_EXCL_LINE */
-            char reply[256];
-            ssize_t reply_length;
-            int ready = wait_for_readable(client->socket_fd, UINT64_C(1000));
+        {
+            int receive_retry = 1;
 
-            /* Excluded: poll reports only environmental socket/system errors here. */
-            if (ready < 0) { /* GCOVR_EXCL_START */
-                fprintf(stderr, "Network error waiting for relay registration: %s\n",
-                        strerror(errno));
-                return 0;
-                /* GCOVR_EXCL_STOP */
-            }
-            if (ready == 0) {
-                break;
-            }
-            reply_length = recv(client->socket_fd, reply, sizeof(reply), 0);
-            /* Excluded: recv errors other than EINTR are operating-system failures. */
-            if (reply_length < 0) { /* GCOVR_EXCL_START */
-                if (errno == EINTR) {
-                    continue;
+            while (receive_retry) {
+                char reply[256];
+                ssize_t reply_length;
+                int ready = wait_for_readable(client->socket_fd, UINT64_C(1000));
+
+                /* Excluded: poll reports only environmental socket/system errors here. */
+                if (ready < 0) { /* GCOVR_EXCL_START */
+                    fprintf(stderr, "Network error waiting for relay registration: %s\n",
+                            strerror(errno));
+                    return 0;
+                    /* GCOVR_EXCL_STOP */
                 }
-                fprintf(stderr, "Could not receive relay registration reply: %s\n",
-                        strerror(errno));
+                if (ready == 0) {
+                    break;
+                }
+                reply_length = recv(client->socket_fd, reply, sizeof(reply), 0);
+                receive_retry = 0;
+                /* Excluded: recv errors other than EINTR are operating-system failures. */
+                if (reply_length < 0) { /* GCOVR_EXCL_START */
+                    if (errno == EINTR) {
+                        receive_retry = 1;
+                        continue;
+                    }
+                    fprintf(stderr, "Could not receive relay registration reply: %s\n",
+                            strerror(errno));
+                    return 0;
+                    /* GCOVR_EXCL_STOP */
+                }
+                if (reply_length == 2 && memcmp(reply, "OK", 2) == 0) {
+                    return 1;
+                }
+                if (reply_length >= 4 && memcmp(reply, "ERR ", 4) == 0) {
+                    fprintf(stderr, "Relay refused registration: %.*s\n",
+                            (int)(reply_length - 4), reply + 4);
+                    return 0;
+                }
+                fprintf(stderr, "Relay returned an invalid registration reply.\n");
                 return 0;
-                /* GCOVR_EXCL_STOP */
             }
-            if (reply_length == 2 && memcmp(reply, "OK", 2) == 0) {
-                return 1;
-            }
-            if (reply_length >= 4 && memcmp(reply, "ERR ", 4) == 0) {
-                fprintf(stderr, "Relay refused registration: %.*s\n",
-                        (int)(reply_length - 4), reply + 4);
-                return 0;
-            }
-            fprintf(stderr, "Relay returned an invalid registration reply.\n");
-            return 0;
         }
     }
 
@@ -222,9 +228,8 @@ int relay_client_register_receiver(relay_client_t *client, const char *session)
     char hello[48];
     int hello_length;
 
-    if (client == NULL || client->socket_fd < 0 || !receiver_session_valid(session)) { /* GCOVR_EXCL_START */
+    if (client == NULL || client->socket_fd < 0 || !receiver_session_valid(session)) {
         return 0;
-        /* GCOVR_EXCL_STOP */
     }
     hello_length = snprintf(hello, sizeof(hello), "HELLO %s recv", session);
     /* Excluded: validated session length makes snprintf failure/truncation unreachable. */
@@ -248,9 +253,8 @@ int relay_client_register_sender(relay_client_t *client,
     if (client == NULL || client->socket_fd < 0 || !receiver_session_valid(session) ||
         !isfinite(loss) || !isfinite(corrupt) || !isfinite(duplicate) ||
         loss < 0.0 || loss > 0.5 || corrupt < 0.0 || corrupt > 0.5 ||
-        duplicate < 0.0 || duplicate > 0.5) { /* GCOVR_EXCL_START */
+        duplicate < 0.0 || duplicate > 0.5) {
         return 0;
-        /* GCOVR_EXCL_STOP */
     }
     hello_length = snprintf(hello, sizeof(hello), "HELLO %s send %.15g %.15g %.15g",
                             session, loss, corrupt, duplicate);
@@ -269,9 +273,8 @@ int relay_client_send_datagram(relay_client_t *client,
 {
     ssize_t sent;
 
-    if (client == NULL || client->socket_fd < 0 || datagram == NULL) { /* GCOVR_EXCL_START */
+    if (client == NULL || client->socket_fd < 0 || datagram == NULL) {
         return -1;
-        /* GCOVR_EXCL_STOP */
     }
     /* Excluded branch: EINTR during send depends on signal delivery by the OS. */
     do {
@@ -307,9 +310,8 @@ relay_io_result_t relay_client_receive_packet(relay_client_t *client,
         return errno == EINTR ? RELAY_IO_TIMEOUT : RELAY_IO_ERROR;
         /* GCOVR_EXCL_STOP */
     }
-    if (!packet_decode(client->datagram, (size_t)received, packet)) { /* GCOVR_EXCL_START */
+    if (!packet_decode(client->datagram, (size_t)received, packet)) {
         return RELAY_IO_INVALID;
-        /* GCOVR_EXCL_STOP */
     }
     return RELAY_IO_PACKET;
 }

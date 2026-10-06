@@ -1,5 +1,5 @@
-#ifndef RECEIVER_H
-#define RECEIVER_H
+#ifndef RECEIVER_GBN_H
+#define RECEIVER_GBN_H
 
 #include "packet.h"
 

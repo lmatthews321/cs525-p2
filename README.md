@@ -6,16 +6,26 @@
 
 ## Known Bugs or Issues
 
-There is a possibililty that the FIN recovery can fail if the timeout is excessively long. However with a receiver linger time of 2 seconds this is unlikely. 
-There are several test exclusions for System type calls (37) File I/O calls (7), State-machine/ protocol invariants (4) and control flow annotations/ test only injections (5). 
+There is a possibility that the FIN recovery can fail if the timeout is excessively long. However with a receiver linger time of 2 seconds this is unlikely. 
+There are 47 coverage-exclusion annotations: 39 excluded blocks, 7 branch exclusions, and 1 line exclusion. They cover outcomes controlled by external system and library calls, including DNS, sockets, polling, clocks, and file/stdio operations.
 
 ## Experience
 
-This was the first project that utilized the AI agent exclusively for all code production. It was magical how quickly a project of this magnitude could be generated. However, with all the generated code it's difficult to really understand everything that was generated. I can get the feel for each function, but fully understanding everything would take almost as long and trying to write all the code myself. It's like black box programing now. We say what inputs and outputs we want and just leave the internals to AI. I did enjoy testing out the finished project by sending and receiving through the relay and understand the concepts of the Go-Back-N protocol. 
+This was the first project that utilized the AI agent exclusively for all code production. It was magical how quickly a project of this magnitude could be generated. However, with all the generated code it's difficult to really understand everything that was generated. I can get the feel for each function, but fully understanding everything would take almost as long and trying to write all the code myself. It's like black box programing now. We say what inputs and outputs we want and just leave the internals to AI. I enjoyed testing out the finished project by sending and receiving through the relay and understand the concepts of the Go-Back-N protocol from this lab. 
 
 ## Analysis
 
 The primary analysis for this project is how the window size affects the performance of our Go-Back-N protocol. A larger window reduces time and increases throughput because more packets can be sent at a time. Loss does affect larger window systems more. They are still faster, but suffer a higher percent of degradation as discussed in the results below. Another feature of the protocol that is tested is the checksum which validates that messages arrive uncorrupted. The program successfully computed the expected value in the lab test file and during actual data transfer through the relay. The three other main pieces of the protocol (sequence numbers, cumulative acknowledgements, and the sender timer) all help ensure packets are received in the correct order. This is proven to work by noting that the file received matches the one that was sent, even if loss, corruption and/or duplication are added. I attempted a few different combinations of these variables and all received files matching the original sent.
+
+## Design
+This project separates packet handling, protocol logic, and I/O so the Go-Back-N state machines can be tested without real sockets, clocks, or files.
+
+The packet layer computes checksums, encodes packets into byte buffers, and decodes and validates buffers into packets. It consists of `packet.c` and `packet.h`.
+
+The Go-Back-N state-machine layer implements the sender and receiver as state structs with status and action results. Its functions process protocol events and, where needed, take the current time in milliseconds; they return actions such as packets to send, payload to deliver, or the next timer deadline. Sender events include data becoming available, input reaching EOF, a cumulative ACK arriving, and retransmission timeout. Receiver events include DATA, FIN, or ACK packet arrival and timer expiration. The receiver processes DATA and FIN; ACK packets are ignored. Errors are returned as statuses rather than delivered as events. This layer consists of `sender_gbn.c`, `sender_gbn.h`, `receiver_gbn.c`, and `receiver_gbn.h`.
+
+The I/O layer handles file operations, relay registration, sockets, polling, and the real clock. It translates I/O results into state-machine events and carries out the actions returned by the state machines. Sender- and receiver-specific I/O is in `sender_io.c` / `sender_io.h` and `receiver_io.c` / `receiver_io.h`. Shared relay I/O is in `relay_io.c` and `relay_io.h`.
+
 
 
 ## Results

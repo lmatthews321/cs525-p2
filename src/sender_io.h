@@ -1,5 +1,5 @@
-#ifndef SENDER_NET_H
-#define SENDER_NET_H
+#ifndef SENDER_IO_H
+#define SENDER_IO_H
 
 #include <stdint.h>
 

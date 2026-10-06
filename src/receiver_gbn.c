@@ -1,4 +1,4 @@
-#include "receiver.h"
+#include "receiver_gbn.h"
 
 #include <string.h>
 

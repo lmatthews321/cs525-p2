@@ -1,9 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "receiver.h"
-#include "receiver_net.h"
-#include "sender.h"
-#include "sender_net.h"
+#include "receiver_gbn.h"
+#include "receiver_io.h"
+#include "sender_gbn.h"
+#include "sender_io.h"
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>

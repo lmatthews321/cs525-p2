@@ -1,7 +1,7 @@
-#include "receiver_net.h"
+#include "receiver_io.h"
 
-#include "receiver.h"
-#include "relay_client.h"
+#include "receiver_gbn.h"
+#include "relay_io.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -9,18 +9,19 @@
 
 #ifdef TEST
 enum {
-    RECEIVER_NET_TEST_NORMAL = 0,
-    RECEIVER_NET_TEST_EXPIRED = 1,
-    RECEIVER_NET_TEST_SEQUENCE_OVERFLOW = 2
+    RECEIVER_IO_TEST_NORMAL = 0,
+    RECEIVER_IO_TEST_EXPIRED = 1,
+    RECEIVER_IO_TEST_SEQUENCE_OVERFLOW = 2
 };
 
-static int receiver_net_test_mode;
+static int receiver_io_test_mode;
 
 /* Set a test-only condition that forces a receiver network error path. */
-void receiver_net_test_set_mode(int mode)
+void receiver_io_test_set_mode(int mode)
 {
-    receiver_net_test_mode = mode;
+    receiver_io_test_mode = mode;
 }
+
 #endif
 
 /* Encode and send one protocol packet through the connected relay client. */
@@ -29,14 +30,23 @@ static int send_packet(relay_client_t *client, const packet_t *packet)
     unsigned char datagram[PACKET_MAX_DATAGRAM_SIZE];
     size_t datagram_length;
 
-    /* Excluded: the receiver state machine only constructs valid ACK packets. */
-    if (!packet_encode(packet, datagram, sizeof(datagram), &datagram_length)) { /* GCOVR_EXCL_START */
+    if (!packet_encode(packet, datagram, sizeof(datagram), &datagram_length)) {
         return 0;
-        /* GCOVR_EXCL_STOP */
     }
     /* Excluded branch: UDP send failure is controlled by OS/socket conditions. */
     return relay_client_send_datagram(client, datagram, datagram_length) == 0; /* GCOVR_EXCL_BR_LINE */
 }
+
+#ifdef TEST
+int receiver_io_test_rejects_invalid_packet(void)
+{
+    relay_client_t client = {-1, {0}, 0, 0};
+    packet_t packet = {0};
+
+    packet.type = (packet_type_t)3;
+    return !send_packet(&client, &packet);
+}
+#endif
 
 /* Register as receiver, write in-order data to disk, ACK packets, and await FIN. */
 int receiver_receive_file(const char *session,
@@ -80,7 +90,7 @@ int receiver_receive_file(const char *session,
         /* GCOVR_EXCL_STOP */
     }
 #ifdef TEST
-    if (receiver_net_test_mode == RECEIVER_NET_TEST_SEQUENCE_OVERFLOW) {
+    if (receiver_io_test_mode == RECEIVER_IO_TEST_SEQUENCE_OVERFLOW) {
         state.expected = UINT32_MAX;
     }
 #endif
@@ -101,7 +111,7 @@ int receiver_receive_file(const char *session,
             /* GCOVR_EXCL_STOP */
         }
 #ifdef TEST
-        if (receiver_net_test_mode == RECEIVER_NET_TEST_EXPIRED) {
+        if (receiver_io_test_mode == RECEIVER_IO_TEST_EXPIRED) {
             now_ms = state.last_valid_ms + RECEIVER_IDLE_TIMEOUT_MS;
         }
 #endif

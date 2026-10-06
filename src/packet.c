@@ -37,12 +37,10 @@ uint16_t packet_checksum(const unsigned char *bytes, size_t length)
 /* Reject packet values that cannot be represented by the wire protocol. */
 static int packet_valid(const packet_t *packet)
 {
-    /* Excluded: invalid packet guards are API validation paths, not protocol behavior. */
     if (packet == NULL || packet->payload_length > PACKET_MAX_PAYLOAD ||
         (packet->type != PACKET_DATA && packet->type != PACKET_ACK &&
-         packet->type != PACKET_FIN)) { /* GCOVR_EXCL_START */
+         packet->type != PACKET_FIN)) {
         return 0;
-        /* GCOVR_EXCL_STOP */
     }
     return packet->type == PACKET_DATA || packet->payload_length == 0;
 }
@@ -93,21 +91,18 @@ int packet_decode(const unsigned char *datagram,
     uint32_t network_sequence;
     size_t payload_length;
 
-    /* Excluded: malformed-wire-format checks are validation-only guard paths. */
     if (datagram == NULL || packet == NULL || datagram_length < PACKET_HEADER_SIZE ||
         datagram[PACKET_RESERVED_OFFSET] != 0 ||
-        datagram[PACKET_TYPE_OFFSET] > PACKET_FIN) { /* GCOVR_EXCL_START */
+        datagram[PACKET_TYPE_OFFSET] > PACKET_FIN) {
         return 0;
-        /* GCOVR_EXCL_STOP */
     }
     memcpy(&network_length, datagram + PACKET_LENGTH_OFFSET, sizeof(network_length));
     payload_length = ntohs(network_length);
     if (payload_length > PACKET_MAX_PAYLOAD ||
         PACKET_HEADER_SIZE + payload_length != datagram_length ||
         (datagram[PACKET_TYPE_OFFSET] != PACKET_DATA && payload_length != 0) ||
-        packet_checksum(datagram, datagram_length) != 0) { /* GCOVR_EXCL_START */
+        packet_checksum(datagram, datagram_length) != 0) {
         return 0;
-        /* GCOVR_EXCL_STOP */
     }
 
     memcpy(&network_sequence, datagram + PACKET_SEQUENCE_OFFSET, sizeof(network_sequence));

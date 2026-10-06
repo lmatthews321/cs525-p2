@@ -1,12 +1,11 @@
-#include "sender.h"
+#include "sender_gbn.h"
 
 #include <string.h>
 
 /* Add timeout durations without overflowing the monotonic millisecond counter. */
 static uint64_t add_saturated(uint64_t value, uint64_t amount)
 {
-    /* Excluded: the saturation edge case is a deterministic overflow guard. */
-    return value > UINT64_MAX - amount ? UINT64_MAX : value + amount; /* GCOVR_EXCL_LINE */
+    return value > UINT64_MAX - amount ? UINT64_MAX : value + amount;
 }
 
 /* Reset an action and copy the current sender status and timer information. */
