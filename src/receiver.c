@@ -2,11 +2,13 @@
 
 #include <string.h>
 
+/* Add durations without wrapping deadlines near the uint64_t limit. */
 static uint64_t add_saturated(uint64_t value, uint64_t amount)
 {
     return value > UINT64_MAX - amount ? UINT64_MAX : value + amount;
 }
 
+/* Clear an action and attach the timer state implied by the receiver status. */
 static void set_action(receiver_state_t *state,
                        receiver_status_t status,
                        receiver_action_t *action)
@@ -19,6 +21,7 @@ static void set_action(receiver_state_t *state,
     }
 }
 
+/* Accept only nonempty session names of up to 32 lowercase letters, digits, or hyphens. */
 int receiver_session_valid(const char *session)
 {
     size_t length = 0;
@@ -38,6 +41,7 @@ int receiver_session_valid(const char *session)
     return length >= 1;
 }
 
+/* Start a receiver at sequence zero and record when its idle timeout begins. */
 void receiver_state_init(receiver_state_t *state, uint64_t now_ms)
 {
     if (state == NULL) {
@@ -47,6 +51,7 @@ void receiver_state_init(receiver_state_t *state, uint64_t now_ms)
     state->last_valid_ms = now_ms;
 }
 
+/* Return the active linger or idle deadline for the receiver state. */
 uint64_t receiver_next_deadline(const receiver_state_t *state)
 {
     if (state == NULL) {
@@ -57,6 +62,7 @@ uint64_t receiver_next_deadline(const receiver_state_t *state)
         : add_saturated(state->last_valid_ms, RECEIVER_IDLE_TIMEOUT_MS);
 }
 
+/* Process DATA, ACK, or FIN and describe payload delivery and ACK work to perform. */
 receiver_status_t receiver_on_packet(receiver_state_t *state,
                                      const packet_t *packet,
                                      uint64_t now_ms,
@@ -124,6 +130,7 @@ receiver_status_t receiver_on_packet(receiver_state_t *state,
     return RECEIVER_LINGERING;
 }
 
+/* Advance the receiver when its timer fires, reporting idle timeout or completion. */
 receiver_status_t receiver_on_timeout(receiver_state_t *state,
                                       uint64_t now_ms,
                                       receiver_action_t *action)

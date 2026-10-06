@@ -35,15 +35,20 @@ typedef struct {
     uint64_t timer_due_ms;
 } receiver_action_t;
 
+/* Return whether session meets the protocol's length and character restrictions. */
 int receiver_session_valid(const char *session);
+/* Initialize receiver state and set its initial idle-time reference. */
 void receiver_state_init(receiver_state_t *state, uint64_t now_ms);
+/* Process an incoming packet and return the response and payload actions needed. */
 receiver_status_t receiver_on_packet(receiver_state_t *state,
                                      const packet_t *packet,
                                      uint64_t now_ms,
                                      receiver_action_t *action);
+/* Handle an idle or linger timer event. */
 receiver_status_t receiver_on_timeout(receiver_state_t *state,
                                       uint64_t now_ms,
                                       receiver_action_t *action);
+/* Get the next deadline at which the receiver should be woken. */
 uint64_t receiver_next_deadline(const receiver_state_t *state);
 
 #endif

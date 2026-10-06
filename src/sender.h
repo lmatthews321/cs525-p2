@@ -38,22 +38,28 @@ typedef struct {
     uint64_t timer_due_ms;
 } sender_action_t;
 
+/* Initialize sender state, returning zero when the window or timeout is invalid. */
 int sender_state_init(sender_state_t *state,
                       uint32_t window_size,
                       uint64_t timeout_ms);
+/* Return whether the sender can accept another DATA packet. */
 int sender_can_accept_data(const sender_state_t *state);
+/* Queue one DATA packet and return any immediate send or timer action. */
 sender_status_t sender_on_data(sender_state_t *state,
                                const unsigned char *payload,
                                size_t payload_length,
                                uint64_t now_ms,
                                sender_action_t *action);
+/* Signal input EOF and queue FIN when all DATA packets have been acknowledged. */
 sender_status_t sender_on_eof(sender_state_t *state,
                               uint64_t now_ms,
                               sender_action_t *action);
+/* Process a cumulative ACK and return retransmission/timer state changes. */
 sender_status_t sender_on_ack(sender_state_t *state,
                               uint32_t next_expected,
                               uint64_t now_ms,
                               sender_action_t *action);
+/* Handle an expired retransmission timer by retrying outstanding packets. */
 sender_status_t sender_on_timeout(sender_state_t *state,
                                   uint64_t now_ms,
                                   sender_action_t *action);

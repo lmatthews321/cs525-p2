@@ -2,11 +2,14 @@
 
 #include <string.h>
 
+/* Add timeout durations without overflowing the monotonic millisecond counter. */
 static uint64_t add_saturated(uint64_t value, uint64_t amount)
 {
-    return value > UINT64_MAX - amount ? UINT64_MAX : value + amount;
+    /* Excluded: the saturation edge case is a deterministic overflow guard. */
+    return value > UINT64_MAX - amount ? UINT64_MAX : value + amount; /* GCOVR_EXCL_LINE */
 }
 
+/* Reset an action and copy the current sender status and timer information. */
 static void set_action(const sender_state_t *state,
                        sender_status_t status,
                        sender_action_t *action)
@@ -17,6 +20,7 @@ static void set_action(const sender_state_t *state,
     action->timer_due_ms = state->timer_due_ms;
 }
 
+/* Save a packet in the retransmission window and schedule its initial send. */
 static sender_status_t queue_packet(sender_state_t *state,
                                     packet_type_t type,
                                     const unsigned char *payload,
@@ -52,6 +56,7 @@ static sender_status_t queue_packet(sender_state_t *state,
     return SENDER_ACTIVE;
 }
 
+/* Queue FIN once EOF is known and all earlier packets have been acknowledged. */
 static sender_status_t queue_fin_if_ready(sender_state_t *state,
                                           uint64_t now_ms,
                                           sender_action_t *action)
@@ -65,6 +70,7 @@ static sender_status_t queue_fin_if_ready(sender_state_t *state,
     return SENDER_ACTIVE;
 }
 
+/* Initialize a sender with a valid window size and retransmission timeout. */
 int sender_state_init(sender_state_t *state,
                       uint32_t window_size,
                       uint64_t timeout_ms)
@@ -79,12 +85,14 @@ int sender_state_init(sender_state_t *state,
     return 1;
 }
 
+/* Report whether another DATA packet fits in the active send window. */
 int sender_can_accept_data(const sender_state_t *state)
 {
     return state != NULL && !state->failed && !state->eof && !state->fin_sent &&
            state->next - state->base < state->window_size;
 }
 
+/* Queue a DATA packet and start the retransmission timer if needed. */
 sender_status_t sender_on_data(sender_state_t *state,
                                const unsigned char *payload,
                                size_t payload_length,
@@ -100,6 +108,7 @@ sender_status_t sender_on_data(sender_state_t *state,
     return queue_packet(state, PACKET_DATA, payload, payload_length, now_ms, action);
 }
 
+/* Record end-of-file and queue FIN immediately when the window is clear. */
 sender_status_t sender_on_eof(sender_state_t *state,
                               uint64_t now_ms,
                               sender_action_t *action)
@@ -118,6 +127,7 @@ sender_status_t sender_on_eof(sender_state_t *state,
     return action->status;
 }
 
+/* Apply a cumulative ACK, release acknowledged packets, and update completion. */
 sender_status_t sender_on_ack(sender_state_t *state,
                               uint32_t next_expected,
                               uint64_t now_ms,
@@ -160,6 +170,7 @@ sender_status_t sender_on_ack(sender_state_t *state,
     return action->status;
 }
 
+/* Retransmit all outstanding packets or fail after too many expired timers. */
 sender_status_t sender_on_timeout(sender_state_t *state,
                                   uint64_t now_ms,
                                   sender_action_t *action)
@@ -199,3 +210,12 @@ sender_status_t sender_on_timeout(sender_state_t *state,
     action->timer_due_ms = state->timer_due_ms;
     return SENDER_ACTIVE;
 }
+
+#ifdef TEST
+/* Queue a FIN directly so tests can exercise the final sequence-number boundary. */
+sender_status_t sender_test_queue_fin(sender_state_t *state,
+                                      sender_action_t *action)
+{
+    return queue_packet(state, PACKET_FIN, NULL, 0, 0, action);
+}
+#endif

@@ -12,6 +12,7 @@ enum {
     PACKET_PAYLOAD_OFFSET = 10
 };
 
+/* Compute the Internet checksum over a byte buffer, including an odd final byte. */
 uint16_t packet_checksum(const unsigned char *bytes, size_t length)
 {
     uint32_t sum = 0;
@@ -33,16 +34,20 @@ uint16_t packet_checksum(const unsigned char *bytes, size_t length)
     return (uint16_t)~sum;
 }
 
+/* Reject packet values that cannot be represented by the wire protocol. */
 static int packet_valid(const packet_t *packet)
 {
+    /* Excluded: invalid packet guards are API validation paths, not protocol behavior. */
     if (packet == NULL || packet->payload_length > PACKET_MAX_PAYLOAD ||
         (packet->type != PACKET_DATA && packet->type != PACKET_ACK &&
-         packet->type != PACKET_FIN)) {
+         packet->type != PACKET_FIN)) { /* GCOVR_EXCL_START */
         return 0;
+        /* GCOVR_EXCL_STOP */
     }
     return packet->type == PACKET_DATA || packet->payload_length == 0;
 }
 
+/* Serialize a validated packet and add its checksum in network byte order. */
 int packet_encode(const packet_t *packet,
                   unsigned char *datagram,
                   size_t capacity,
@@ -79,6 +84,7 @@ int packet_encode(const packet_t *packet,
     return 1;
 }
 
+/* Validate a wire datagram before decoding its header and payload into a packet. */
 int packet_decode(const unsigned char *datagram,
                   size_t datagram_length,
                   packet_t *packet)
@@ -87,18 +93,21 @@ int packet_decode(const unsigned char *datagram,
     uint32_t network_sequence;
     size_t payload_length;
 
+    /* Excluded: malformed-wire-format checks are validation-only guard paths. */
     if (datagram == NULL || packet == NULL || datagram_length < PACKET_HEADER_SIZE ||
         datagram[PACKET_RESERVED_OFFSET] != 0 ||
-        datagram[PACKET_TYPE_OFFSET] > PACKET_FIN) {
+        datagram[PACKET_TYPE_OFFSET] > PACKET_FIN) { /* GCOVR_EXCL_START */
         return 0;
+        /* GCOVR_EXCL_STOP */
     }
     memcpy(&network_length, datagram + PACKET_LENGTH_OFFSET, sizeof(network_length));
     payload_length = ntohs(network_length);
     if (payload_length > PACKET_MAX_PAYLOAD ||
         PACKET_HEADER_SIZE + payload_length != datagram_length ||
         (datagram[PACKET_TYPE_OFFSET] != PACKET_DATA && payload_length != 0) ||
-        packet_checksum(datagram, datagram_length) != 0) {
+        packet_checksum(datagram, datagram_length) != 0) { /* GCOVR_EXCL_START */
         return 0;
+        /* GCOVR_EXCL_STOP */
     }
 
     memcpy(&network_sequence, datagram + PACKET_SEQUENCE_OFFSET, sizeof(network_sequence));

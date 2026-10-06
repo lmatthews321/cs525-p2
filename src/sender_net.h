@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+/* Send file_path to the receiver in session using the configured Go-Back-N window. */
 int sender_send_file(const char *session,
                      const char *relay,
                      uint16_t port,

@@ -33,8 +33,8 @@ else ifeq ($(BUILD),test)
   BUILD_DIR := $(BUILD_BASE_DIR)/tests
   TEST_TARGET ?= $(BUILD_DIR)/$(APP_NAME)_t
 else ifeq ($(BUILD),debug-test)
-  CFLAGS := -g -O0 -DDEBUG -DTEST -fno-omit-frame-pointer -fsanitize=address
-  LDFLAGS += -fsanitize=address
+  CFLAGS := -g -O0 -DDEBUG -DTEST -fno-omit-frame-pointer -fsanitize=address -fprofile-arcs -ftest-coverage
+  LDFLAGS += -fsanitize=address -fprofile-arcs -ftest-coverage
   BUILD_DIR := $(BUILD_BASE_DIR)/debug-test
   TEST_TARGET ?= $(BUILD_DIR)/$(APP_NAME)_td
 else
@@ -130,18 +130,27 @@ check:
 	fi
 
 
-report:
+report: $(BUILD_BASE_DIR)/tests/$(APP_NAME)_t
 	@if [[ -e ./build/tests/$(APP_NAME)_t ]]; then \
 		./build/tests/$(APP_NAME)_t; \
 	else \
 		echo "Build the debug target first by running 'make test'."; \
 		exit 1; \
 	fi
-	./build/tests/$(APP_NAME)_t
 	mkdir -p ./build/report/html
 	mkdir -p ./build/report/txt
-	gcovr -r . --html --html-details --exclude-directories build/tests/harness --exclude '.*main\.c$$' --exclude '.*test\.c$$' -o ./build/report/html/coverage_report.html
-	gcovr -r . --txt                 --exclude-directories build/tests/harness --exclude '.*main\.c$$' --exclude '.*test\.c$$'
+	gcovr -r . build/tests --html --html-details \
+		--exclude-directories tests/harness \
+		--exclude-directories build/tests/harness \
+		--exclude '.*main\.c$$' --exclude '.*test\.c$$' \
+		--exclude '.*harness/.*' --exclude '.*unity\.c$$' \
+		-o ./build/report/html/coverage_report.html
+	gcovr -r . build/tests --txt \
+		--exclude-directories tests/harness \
+		--exclude-directories build/tests/harness \
+		--exclude '.*main\.c$$' --exclude '.*test\.c$$' \
+		--exclude '.*harness/.*' --exclude '.*unity\.c$$' \
+		| tee ./build/report/txt/coverage_report.txt
 
 
 help:
